@@ -64,18 +64,17 @@
     <div class="card admin-box">
         <h3>⚙️ 店長管理後台</h3>
         
-        <!-- 更新薪資區 -->
         <div class="form-group">
             <label>店長管理密碼：</label>
             <input type="password" id="adminPass" placeholder="預設密碼 8888">
         </div>
         <div class="form-group">
-            <label>上傳最新 Excel 檔：</label>
-            <input type="file" id="excelFile" accept=".xlsx, .xls">
+            <label>上傳 Excel 檔（可一次選多個檔案）：</label>
+            <!-- 加上 multiple 屬性支援多檔選取 -->
+            <input type="file" id="excelFile" accept=".xlsx, .xls" multiple>
         </div>
         <button onclick="uploadExcel()" style="background:#555;">更新網頁薪資資料</button>
 
-        <!-- 修改密碼區 -->
         <div class="change-pass-box">
             <h4 style="margin: 0 0 10px 0; color:#333;">🔒 修改店長後台密碼</h4>
             <div class="form-group">
@@ -88,27 +87,28 @@
 
 <script>
     let db = JSON.parse(localStorage.getItem('salaryDB')) || {};
-    // 預設店長密碼為 8888，若有修改過則讀取舊設定
     let adminPassword = localStorage.getItem('adminPassword') || '8888';
 
     window.onload = function() {
         updateStoreDropdown();
     };
 
-    // 上傳 Excel
-    function uploadExcel() {
+    // 支援多檔讀取與匯入
+    async function uploadExcel() {
         const pass = document.getElementById('adminPass').value;
         if (pass !== adminPassword) return alert('店長管理密碼錯誤！');
         
         const fileInput = document.getElementById('excelFile');
-        if (!fileInput.files.length) return alert('請先選擇 Excel 檔案！');
+        const files = fileInput.files;
+        if (!files.length) return alert('請先選擇至少一個 Excel 檔案！');
 
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const data = new Uint8Array(e.target.result);
+        let newDb = JSON.parse(JSON.stringify(db)); // 保留原有資料並覆蓋/新增
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const data = await file.arrayBuffer();
             const workbook = XLSX.read(data, {type: 'array'});
-            
-            let newDb = {};
+
             workbook.SheetNames.forEach(sheetName => {
                 const sheet = workbook.Sheets[sheetName];
                 const rows = XLSX.utils.sheet_to_json(sheet);
@@ -130,30 +130,24 @@
                     };
                 });
             });
+        }
 
-            db = newDb;
-            localStorage.setItem('salaryDB', JSON.stringify(db));
-            alert('薪資資料已成功更新！');
-            updateStoreDropdown();
-        };
-        reader.readAsArrayBuffer(fileInput.files[0]);
+        db = newDb;
+        localStorage.setItem('salaryDB', JSON.stringify(db));
+        alert(`成功匯入 ${files.length} 個薪資檔案！`);
+        updateStoreDropdown();
     }
 
-    // 修改店長密碼
     function changeAdminPassword() {
         const currentPass = document.getElementById('adminPass').value;
         const newPass = document.getElementById('newAdminPass').value.trim();
 
-        if (currentPass !== adminPassword) {
-            return alert('請先在上方「店長管理密碼」欄位輸入正確的舊密碼！');
-        }
-        if (!newPass) {
-            return alert('請輸入要設定的新密碼！');
-        }
+        if (currentPass !== adminPassword) return alert('請先在上方輸入正確的目前密碼！');
+        if (!newPass) return alert('請輸入新密碼！');
 
         adminPassword = newPass;
         localStorage.setItem('adminPassword', newPass);
-        alert('店長密碼已成功修改！下次登入請使用新密碼。');
+        alert('店長密碼已修改完成！');
         document.getElementById('newAdminPass').value = '';
     }
 
