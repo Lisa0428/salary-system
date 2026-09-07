@@ -4,31 +4,30 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>珍煮丹 - 薪資查詢系統</title>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         :root { --primary-color: #8c6239; --bg-color: #f7f4ef; --card-bg: #ffffff; }
         body { font-family: sans-serif; background-color: var(--bg-color); padding: 16px; display: flex; justify-content: center; }
         .container { width: 100%; max-width: 480px; }
-        .card { background: var(--card-bg); border-radius: 12px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        .card { background: var(--card-bg); border-radius: 12px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
         h2, h3 { color: var(--primary-color); text-align: center; }
         .form-group { margin-bottom: 12px; }
         label { display: block; margin-bottom: 6px; font-weight: bold; }
         select, input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 1rem; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; background: var(--primary-color); color: #fff; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 5px; }
-        .salary-slip { display: none; margin-top: 15px; border: 1px dashed #ccc; padding: 15px; border-radius: 8px; }
-        .salary-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #eee; }
-        .salary-row.total { font-weight: bold; color: #d9534f; border-top: 2px solid #333; }
-        .admin-box { background: #eef2f5; border: 1px solid #ccd; }
-        .change-pass-box { margin-top: 15px; padding-top: 15px; border-top: 1px dashed #bbb; }
+        button { width: 100%; padding: 14px; background: var(--primary-color); color: #fff; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; }
+        .salary-slip { display: none; margin-top: 20px; border: 1px dashed #ccc; padding: 15px; border-radius: 8px; }
+        .salary-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+        .salary-row.total { font-weight: bold; color: #d9534f; border-top: 2px solid #333; margin-top: 10px; }
+        #loading { text-align: center; color: #666; font-size: 1.1rem; padding: 20px 0; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <!-- 員工查詢區 -->
     <div class="card">
-        <h2>🧋 珍煮丹 - 薪資查詢</h2>
-        <form id="searchForm">
+        <h2>🧋 珍煮丹 - 薪資查詢系統</h2>
+        <div id="loading">⏳ 正在連線讀取最新薪資資料...</div>
+        
+        <form id="searchForm" style="display:none;">
             <div class="form-group">
                 <label>1. 選擇門市：</label>
                 <select id="searchStore" onchange="updateMonthDropdown()"></select>
@@ -42,8 +41,8 @@
                 <select id="empName"></select>
             </div>
             <div class="form-group">
-                <label>4. 驗證密碼（身分證後四碼）：</label>
-                <input type="password" id="empPass" placeholder="請輸入密碼" required>
+                <label>4. 身份驗證密碼（身分證後四碼）：</label>
+                <input type="password" id="empPass" placeholder="請輸入身分證後四碼" required>
             </div>
             <button type="submit">查詢薪資單</button>
         </form>
@@ -56,100 +55,31 @@
             <div class="salary-row"><span>職稱：</span><span id="slipRole"></span></div>
             <div class="salary-row"><span>底薪/時薪：</span><span id="slipRate"></span></div>
             <div class="salary-row"><span>工作時數：</span><span id="slipHours"></span></div>
+            <div class="salary-row"><span>加班費：</span><span id="slipOvertime"></span></div>
+            <div class="salary-row"><span>扣款/備註：</span><span id="slipDeduct"></span></div>
             <div class="salary-row total"><span>實發薪資總額：</span><span id="slipTotal"></span></div>
-        </div>
-    </div>
-
-    <!-- 店長管理後台 -->
-    <div class="card admin-box">
-        <h3>⚙️ 店長管理後台</h3>
-        
-        <div class="form-group">
-            <label>店長管理密碼：</label>
-            <input type="password" id="adminPass" placeholder="預設密碼 8888">
-        </div>
-        <div class="form-group">
-            <label>上傳 Excel 檔（可一次選多個檔案）：</label>
-            <!-- 加上 multiple 屬性支援多檔選取 -->
-            <input type="file" id="excelFile" accept=".xlsx, .xls" multiple>
-        </div>
-        <button onclick="uploadExcel()" style="background:#555;">更新網頁薪資資料</button>
-
-        <div class="change-pass-box">
-            <h4 style="margin: 0 0 10px 0; color:#333;">🔒 修改店長後台密碼</h4>
-            <div class="form-group">
-                <input type="password" id="newAdminPass" placeholder="請輸入新密碼">
-            </div>
-            <button onclick="changeAdminPassword()" style="background:#777;">確認修改後台密碼</button>
         </div>
     </div>
 </div>
 
 <script>
-    let db = JSON.parse(localStorage.getItem('salaryDB')) || {};
-    let adminPassword = localStorage.getItem('adminPassword') || '8888';
+    // ⚠️ 請替換為您部署得到的 API 網址
+    const GAS_API_URL = "YOUR_GAS_API_URL"; 
+    let db = {};
 
     window.onload = function() {
-        updateStoreDropdown();
-    };
-
-    // 支援多檔讀取與匯入
-    async function uploadExcel() {
-        const pass = document.getElementById('adminPass').value;
-        if (pass !== adminPassword) return alert('店長管理密碼錯誤！');
-        
-        const fileInput = document.getElementById('excelFile');
-        const files = fileInput.files;
-        if (!files.length) return alert('請先選擇至少一個 Excel 檔案！');
-
-        let newDb = JSON.parse(JSON.stringify(db)); // 保留原有資料並覆蓋/新增
-
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            const data = await file.arrayBuffer();
-            const workbook = XLSX.read(data, {type: 'array'});
-
-            workbook.SheetNames.forEach(sheetName => {
-                const sheet = workbook.Sheets[sheetName];
-                const rows = XLSX.utils.sheet_to_json(sheet);
-                rows.forEach(row => {
-                    const store = row['門市'] || '預設門市';
-                    const month = row['發放月份'] || sheetName;
-                    const name = row['姓名'];
-                    if (!name) return;
-
-                    if (!newDb[store]) newDb[store] = {};
-                    if (!newDb[store][month]) newDb[store][month] = {};
-
-                    newDb[store][month][name] = {
-                        pass: String(row['密碼'] || '1234').slice(-4),
-                        role: row['職稱'] || '員工',
-                        rate: row['時薪/底薪'] || '-',
-                        hours: row['總時數'] || '0',
-                        total: row['合計發放薪資'] || '0'
-                    };
-                });
+        fetch(GAS_API_URL)
+            .then(res => res.json())
+            .then(data => {
+                db = data.stores;
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('searchForm').style.display = 'block';
+                updateStoreDropdown();
+            })
+            .catch(err => {
+                document.getElementById('loading').textContent = "❌ 資料讀取失敗，請重新整理頁面。";
             });
-        }
-
-        db = newDb;
-        localStorage.setItem('salaryDB', JSON.stringify(db));
-        alert(`成功匯入 ${files.length} 個薪資檔案！`);
-        updateStoreDropdown();
-    }
-
-    function changeAdminPassword() {
-        const currentPass = document.getElementById('adminPass').value;
-        const newPass = document.getElementById('newAdminPass').value.trim();
-
-        if (currentPass !== adminPassword) return alert('請先在上方輸入正確的目前密碼！');
-        if (!newPass) return alert('請輸入新密碼！');
-
-        adminPassword = newPass;
-        localStorage.setItem('adminPassword', newPass);
-        alert('店長密碼已修改完成！');
-        document.getElementById('newAdminPass').value = '';
-    }
+    };
 
     function updateStoreDropdown() {
         const storeSelect = document.getElementById('searchStore');
@@ -161,7 +91,10 @@
         const store = document.getElementById('searchStore').value;
         const monthSelect = document.getElementById('searchMonth');
         monthSelect.innerHTML = '<option value="">請選擇月份</option>';
-        if (store && db[store]) Object.keys(db[store]).forEach(m => monthSelect.add(new Option(m, m)));
+        if (store && db[store]) {
+            Object.keys(db[store]).forEach(m => monthSelect.add(new Option(m, m)));
+        }
+        updateNameDropdown();
     }
 
     function updateNameDropdown() {
@@ -169,7 +102,9 @@
         const month = document.getElementById('searchMonth').value;
         const nameSelect = document.getElementById('empName');
         nameSelect.innerHTML = '<option value="">請選擇姓名</option>';
-        if (store && month && db[store][month]) Object.keys(db[store][month]).forEach(n => nameSelect.add(new Option(n, n)));
+        if (store && month && db[store][month]) {
+            Object.keys(db[store][month]).forEach(n => nameSelect.add(new Option(n, n)));
+        }
     }
 
     document.getElementById('searchForm').addEventListener('submit', function(e) {
@@ -179,17 +114,20 @@
         const name = document.getElementById('empName').value;
         const pass = document.getElementById('empPass').value.trim();
 
-        if (!db[store] || !db[store][month] || !db[store][month][name]) return alert('查無資料');
-        const emp = db[store][month][name];
-        if (emp.pass !== pass) return alert('密碼錯誤！');
+        if (!store || !month || !name) return alert("請完整填寫選項！");
+        
+        const empData = db[store][month][name];
+        if (empData.pass !== pass) return alert("密碼錯誤！");
 
         document.getElementById('slipStore').textContent = store;
         document.getElementById('slipMonth').textContent = month;
         document.getElementById('slipName').textContent = name;
-        document.getElementById('slipRole').textContent = emp.role;
-        document.getElementById('slipRate').textContent = emp.rate;
-        document.getElementById('slipHours').textContent = emp.hours;
-        document.getElementById('slipTotal').textContent = emp.total;
+        document.getElementById('slipRole').textContent = empData.role;
+        document.getElementById('slipRate').textContent = empData.rate;
+        document.getElementById('slipHours').textContent = empData.hours;
+        document.getElementById('slipOvertime').textContent = empData.overtime;
+        document.getElementById('slipDeduct').textContent = empData.deduct;
+        document.getElementById('slipTotal').textContent = empData.total;
         document.getElementById('salarySlip').style.display = 'block';
     });
 </script>
